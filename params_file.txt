@@ -1,0 +1,20 @@
+# ROS package name
+
+ROS_PKG_NAME = deep_reinforcement_abstract_lfd
+
+# Where to save models
+
+CHECKPOINT_DIRECTORY = ckpt
+CHECKPOINT_NAME = model.ckpt
+IRNV2_CHECKPOINT_DIR = ../../../../deep_q_network/src
+IRNV2_CHECKPOINT = inception_resnet_v2_2016_08_30.ckpt
+
+# Model to restore from (e.g. "ckpt_final/model.ckpt")
+
+RESTORE_CHECKPOINT = ../../../../deep_q_network/src/hri_omega/omega_2/model.ckpt
+LOG_DIR = log
+
+# Location of TFRecords
+
+TRAIN_DIR = ../../tfrecords/train/
+TEST_DIR = ../../tfrecords/test/
