@@ -161,29 +161,34 @@ def gen_TFRecord_from_file(out_dir, out_filename, bag_filename, flip=False):
             time_log_index += 1
 
         elif(topic == topic_names[1]):
-            packager.imgCallback(msg)
+            packager.topImgCallback(msg)
         elif(topic == topic_names[2]):
+            packager.botImgCallback(msg)
+        elif(topic == topic_names[3]):
             packager.audCallback(msg)
 
     # need to write the TFRecord for the final interaction
-    pre_act = past_actions[-2]
-    cur_act = past_actions[-1]
-    next_act = -1
+    # print("past_actions length = %s" % (len(past_actions)))
+    # check the length of past_actions, create tfrecord iff >= 2
+    if len(past_actions) >= 2:
+        pre_act = past_actions[-2]
+        cur_act = past_actions[-1]
+        next_act = -1
 
-    ex = make_sequence_example(
-        packager.getImgStack(), img_dtype,
-        packager.getPntStack(), pnt_dtype,
-        packager.getAudStack(), aud_dtype,
-        pre_act, cur_act, next_act,
-        state,
-        [],
-        [],
-        [],
-        name + '_' + str(count))
-    writefile_name = begin_file + str(cur_act) + end_file
-    writer = tf.python_io.TFRecordWriter(writefile_name)
-    writer.write(ex.SerializeToString())
-    writer.close()
+        ex = make_sequence_example(
+            packager.getImgStack(), img_dtype,
+            packager.getPntStack(), pnt_dtype,
+            packager.getAudStack(), aud_dtype,
+            pre_act, cur_act, next_act,
+            state,
+            [],
+            [],
+            [],
+            name + '_' + str(count))
+        writefile_name = begin_file + str(cur_act) + end_file
+        writer = tf.python_io.TFRecordWriter(writefile_name)
+        writer.write(ex.SerializeToString())
+        writer.close()
 
     bag.close()
 
@@ -230,6 +235,7 @@ if __name__ == '__main__':
     outdir = os.environ["HOME"] + "/Documents/samples/tfrecords/"
 
     if(gen_single_file):
+        print("GENERATING A SINGLE TEST FILE...")
         gen_TFRecord_from_file(out_dir=outdir, out_filename="sample", bag_filename=bagfile, flip=False)
 
 #############################

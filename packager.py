@@ -35,6 +35,7 @@ from dqn_model import DQNModel
 topic_names = [
     '/action_finished',
     '/nao_robot/camera/top/camera/image_raw',
+    '/nao_robot/camera/bottom/camera/image_raw',
     '/nao_robot/microphone/naoqi_microphone/audio_raw'
 ]
 
@@ -70,9 +71,14 @@ class DQNPackager:
         QUEUE_SIZE = 1
         self.sub_act = rospy.Subscriber(topic_names[0],
                                         Int8, self.actCallback, queue_size=QUEUE_SIZE)
-        self.sub_img = rospy.Subscriber(topic_names[1],
-                                        Image, self.imgCallback, queue_size=QUEUE_SIZE)
-        self.sub_aud = rospy.Subscriber(topic_names[2],
+
+        self.sub_top_img = rospy.Subscriber(topic_names[1],
+                                            Image, self.topImgCallback, queue_size=QUEUE_SIZE)
+
+        self.sub_bot_img = rospy.Subscriber(topic_names[2],
+                                            Image, self.botImgCallback, queue_size=QUEUE_SIZE)
+
+        self.sub_aud = rospy.Subscriber(topic_names[3],
                                         AudioBuffer, self.audCallback, queue_size=QUEUE_SIZE)
 
     def getRecentAct(self):
@@ -92,10 +98,10 @@ class DQNPackager:
     ############################
 
     def clearMsgs(self):
-        self.__recent_msgs = [False] * 2
+        self.__recent_msgs = [False] * 3
 
     def reset(self, already_locked=False):
-        if(not already_locked):
+        if not already_locked:
             self.__lock.acquire()
         self.clearMsgs()
         self.__imgStack = 0
@@ -108,13 +114,23 @@ class DQNPackager:
         if not already_locked:
             self.__lock.release()
 
-    def imgCallback(self, msg):
+    def actCallback(self, msg):
+        self.__most_recent_act = msg
+        self.checkMsgs()
+        return
+
+    def topImgCallback(self, msg):
         self.__recent_msgs[0] = msg
         self.checkMsgs()
         return
 
-    def audCallback(self, msg):
+    def botImgCallback(self, msg):
         self.__recent_msgs[1] = msg
+        self.checkMsgs()
+        return
+
+    def audCallback(self, msg):
+        self.__recent_msgs[2] = msg
         self.checkMsgs()
         return
 
@@ -134,14 +150,17 @@ class DQNPackager:
             return
 
         # organize and send data
-        img = self.__recent_msgs[0]
-        aud = self.formatAudMsg(self.__recent_msgs[1])  # process all audio data together prior to sending
+        # print("__recent_msgs length = %s" % (len(self.__recent_msgs)))
+        top_img = self.__recent_msgs[0]
+        bot_img = self.__recent_msgs[1]
+        aud = self.formatAudMsg(self.__recent_msgs[2])  # process all audio data together prior to sending
 
         if(type(self.__imgStack) == int):
-            self.__imgStack = [img]
+            self.__imgStack = [top_img, bot_img]
             self.__audStack = [aud]
         else:
-            self.__imgStack.append(img)
+            self.__imgStack.append(top_img)
+            self.__imgStack.append(bot_img)
             self.__audStack.append(aud)
 
         self.clearMsgs()
