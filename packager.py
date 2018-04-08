@@ -33,7 +33,7 @@ import librosa, librosa.display
 from dqn_model import DQNModel
 
 topic_names = [
-    '/action_finished',
+    '/action_started',
     '/nao_robot/camera/top/camera/image_raw',
     '/nao_robot/camera/bottom/camera/image_raw',
     '/nao_robot/microphone/naoqi_microphone/audio_raw'

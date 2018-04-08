@@ -27,7 +27,7 @@ from packager import *
 
 # rostopic names
 topic_names = [
-    '/action_finished',
+    '/action_started',
     '/nao_robot/camera/top/camera/image_raw',
     '/nao_robot/camera/bottom/camera/image_raw',
     '/nao_robot/microphone/naoqi_microphone/audio_raw'
@@ -71,7 +71,16 @@ def gen_TFRecord_from_file(out_dir, out_filename, bag_filename, flip=False):
     count, formatcount = 0, 0
 
     # read RosBag
-    bag = rosbag.Bag(bagfile)
+    bag = rosbag.Bag(bag_filename)
+
+    # print some debugging info about the bag
+    types, topics = bag.get_type_and_topic_info()
+    print("===DEBUG===\nBag info:\nnum messages = %s\nstart_time = %s\nend_time = %s\n" %
+          (bag.get_message_count(), bag.get_start_time(), bag.get_end_time()))
+    print("Topics:")
+    for k in topics.keys():
+        print("%s - %s messages" % (k, topics[k][1]))
+    print("===/DEBUG===")
 
     # setup file names
     begin_file = out_dir + out_filename + '_'
@@ -87,9 +96,11 @@ def gen_TFRecord_from_file(out_dir, out_filename, bag_filename, flip=False):
     #  ALTER TIMING INFO  #
     #######################
 
-    for topic, msg, t in bag.read_messages(topics=['/action_finished']):
-        if(index >= 0 and index <= 4 and msg.data == 1 and state == 1):
-            msg.data = 2
+    for topic, msg, t in bag.read_messages(topics=['/action_started']):
+        print("===DEBUG===\ntopic = %s\nmsg = %s\nt = %s\n===/DEBUG===""" % (topic, msg, t))
+
+        # if(index >= 0 and index <= 4 and msg.data == 1 and state == 1):
+        #    msg.data = 2
         if(msg.data == 0):
             t = t - rospy.Duration(2.5)
         if(msg.data == 1):
@@ -99,11 +110,16 @@ def gen_TFRecord_from_file(out_dir, out_filename, bag_filename, flip=False):
         time_log.append(t)
         all_actions.append(msg)
 
+    # fail early if the timing info was not properly set
+    assert len(time_log) > 0
+
     #######################
     #      READ FILE      #
     #######################
 
     for topic, msg, t in bag.read_messages(topics=topic_names):
+        # DEBUG
+        print("===DEBUG===\ntime_log_index = %s\ntime_log length = %s\nt = %s\n===/DEBUG===" % (time_log_index, len(time_log), t))
 
         if(time_log_index < len(time_log) and t > time_log[time_log_index]):
             # Observed action: Need to either store observations in memory or
@@ -191,6 +207,7 @@ def gen_TFRecord_from_file(out_dir, out_filename, bag_filename, flip=False):
         writer.close()
 
     bag.close()
+    print("WROTE %s sequences from %s to %s" % (count, bag_filename, out_dir + out_filename))
 
 
 def check(filenames):
