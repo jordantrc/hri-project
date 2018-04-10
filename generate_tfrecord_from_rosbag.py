@@ -14,6 +14,7 @@ import tensorflow as tf
 import numpy as np
 
 # file IO
+import heapq
 import rosbag
 import os
 from os.path import isfile, join
@@ -43,7 +44,77 @@ p  - how many prompts had been delivered before s
 '''
 
 
-def gen_TFRecord_from_file(out_dir, out_filename, bag_filename, flip=False):
+def read_timing_file(filename):
+    '''reads timing file'''
+    ifile = open(filename, 'r')
+    timing_queue = []
+    line = ifile.readline()
+    while len(line) != 0:
+        line = line.split()
+        event_time = float(line[1])
+        event_time = rospy.Duration(event_time)
+        timing_queue.append((event_time, line[0]))
+        line = ifile.readline()
+    heapq.heapify(timing_queue)
+    ifile.close()
+    return timing_queue
+
+
+# Format the data to be read
+def processData(inp, data_type):
+    data_s = tf.reshape(inp, [-1, data_type["cmp_h"], data_type["cmp_w"], data_type["num_c"]])
+    return tf.cast(data_s, tf.uint8)
+
+
+# Use for visualizing Data Types
+# taken from: https://github.com/AssistiveRoboticsUNH/TR-LfD/blob/master/itbn_lfd/itbn_model/src/itbn_classifier/tools/generate_itbn_tfrecords.py
+def show(data, d_type):
+    tout = []
+    out = []
+    for i in range(data.shape[0]):
+        imf = np.reshape(data[i], (d_type["cmp_h"], d_type["cmp_w"], d_type["num_c"]))
+
+        limit_size = d_type["cmp_w"]
+        frame_limit = 12
+        if d_type["name"] == "aud":
+            frame_limit = 120
+
+        if (d_type["cmp_w"] > limit_size):
+            mod = limit_size / float(d_type["cmp_h"])
+            imf = cv2.resize(imf, None, fx=mod, fy=mod, interpolation=cv2.INTER_CUBIC)
+
+        if (imf.shape[2] == 2):
+            imf = np.concatenate((imf, np.zeros((d_type["cmp_h"], d_type["cmp_w"], 1))),
+                                 axis=2)
+            imf[..., 0] = imf[..., 1]
+            imf[..., 2] = imf[..., 1]
+            imf = imf.astype(np.uint8)
+
+        if (i % frame_limit == 0 and i != 0):
+            if (len(tout) == 0):
+                tout = out.copy()
+            else:
+                tout = np.concatenate((tout, out), axis=0)
+            out = []
+        if (len(out) == 0):
+            out = imf
+        else:
+            out = np.concatenate((out, imf), axis=1)
+    if (data.shape[0] % frame_limit != 0):
+        fill = np.zeros((d_type["cmp_h"], d_type["cmp_w"] * (frame_limit -
+                                                             (data.shape[0] % frame_limit)),
+                         d_type["num_c"]))  # .fill(255)
+        fill.fill(0)
+        out = np.concatenate((out, fill), axis=1)
+    if (len(out) != 0):
+        if (len(tout) == 0):
+            tout = out.copy()
+        else:
+            tout = np.concatenate((tout, out), axis=0)
+        return tout
+
+
+def gen_TFRecord_from_file(out_dir, out_filename, bag_filename, timing_filename, flip=False):
     # outdir, bagfile, state, name, flip=False, index=-1):
     '''
     out_dir - the desierd output directory
@@ -57,19 +128,6 @@ def gen_TFRecord_from_file(out_dir, out_filename, bag_filename, flip=False):
     # packager subscribes to rostopics and does pre-processing
     packager = DQNPackager(flip=flip)
 
-    # The occurence and times when actions begin
-    time_log = []
-    all_actions = []
-
-    # variables that are altered during the generation process
-    past_actions = []
-    mostrecent_act = -1
-    history = []
-
-    # counters
-    time_log_index = 0
-    count, formatcount = 0, 0
-
     # read RosBag
     bag = rosbag.Bag(bag_filename)
 
@@ -82,132 +140,91 @@ def gen_TFRecord_from_file(out_dir, out_filename, bag_filename, flip=False):
         print("%s - %s messages" % (k, topics[k][1]))
     print("===/DEBUG===")
 
-    # setup file names
-    begin_file = out_dir + out_filename + '_'
-
-    end_file = ".tfrecord"
-    if(flip):
-        end_file = "_flip" + end_file
-
-    # state is an un-used variable but we maintin it as 0 here to avoid issues with legacy code
-    state = 0
-
     #######################
     #  ALTER TIMING INFO  #
     #######################
 
-    for topic, msg, t in bag.read_messages(topics=['/action_started']):
-        print("===DEBUG===\ntopic = %s\nmsg = %s\nt = %s\n===/DEBUG===""" % (topic, msg, t))
+    # for topic, msg, t in bag.read_messages(topics=['/action_started']):
+    #    print("===DEBUG===\ntopic = %s\nmsg = %s\nt = %s\n===/DEBUG===""" % (topic, msg, t))
 
-        # if(index >= 0 and index <= 4 and msg.data == 1 and state == 1):
-        #    msg.data = 2
-        if(msg.data == 0):
-            t = t - rospy.Duration(2.5)
-        if(msg.data == 1):
-            t = t - rospy.Duration(2.5)
-        if(msg.data == 2):
-            t = t - rospy.Duration(1)
-        time_log.append(t)
-        all_actions.append(msg)
+    #   if(index >= 0 and index <= 4 and msg.data == 1 and state == 1):
+    #    msg.data = 2
+    #   if(msg.data == 0):
+    #        t = t - rospy.Duration(2.5)
+    #    if(msg.data == 1):
+    #        t = t - rospy.Duration(2.5)
+    #    if(msg.data == 2):
+    #        t = t - rospy.Duration(1)
+    #    time_log.append(t)
+    #    all_actions.append(msg)
 
     # fail early if the timing info was not properly set
-    assert len(time_log) > 0
+    # assert len(time_log) > 0
+
+    #######################
+    #   TIMING FILE       #
+    #######################
+
+    timing_queue = read_timing_file(timing_filename)
+    current_time = heapq.heappop(timing_queue)
+    timing_dict = {}
 
     #######################
     #      READ FILE      #
     #######################
+    # adapted from:
+    # https://github.com/AssistiveRoboticsUNH/TR-LfD/blob/master/itbn_lfd/itbn_model/src/itbn_classifier/tools/generate_itbn_tfrecords.py
+    start_time = None
+    all_timing_frames_found = False
+    msg_count = 0
 
     for topic, msg, t in bag.read_messages(topics=topic_names):
         # DEBUG
-        print("===DEBUG===\ntime_log_index = %s\ntime_log length = %s\nt = %s\n===/DEBUG===" % (time_log_index, len(time_log), t))
+        # print("===DEBUG===\ntopic = %s\nmsg = %s\nt = %s\n===/DEBUG===" % (topic, msg, t))
+        if start_time is None:
+            start_time = t
 
-        if(time_log_index < len(time_log) and t > time_log[time_log_index]):
-            # Observed action: Need to either store observations in memory or
-            # write to TFRecord
-
-            past_actions.append(all_actions[time_log_index].data)
-
-            if(len(past_actions) >= 2):
-
-                # performing pre-processing steps on previous observations
-                packager.formatOutput(name=name + '_' + str(formatcount))
-                formatcount += 1
-
-                if(len(past_actions) >= 3):
-                    # record actions
-                    pre_act = past_actions[-3]
-                    cur_act = past_actions[-2]
-                    next_act = past_actions[-1]
-
-                    if cur_act != next_act:
-                        # Because each TFRecord needs to store the subsequent state and
-                        # action we only generate TFRecords for the turn after the action
-                        # happened
-                        # (ie. (s_{t-1}, a_{t-1}, s_t, a_t) instead of
-                        # (s_t, a_t, s_{t+1}, a_{t+1}))
-                        ex = make_sequence_example(
-                            history[0], img_dtype,
-                            history[1], pnt_dtype,
-                            history[2], aud_dtype,
-                            pre_act, cur_act, next_act,
-                            state,
-                            packager.getImgStack(),
-                            packager.getPntStack(),
-                            packager.getAudStack(),
-                            name + '_' + str(count))
-                        writefile_name = begin_file + str(cur_act) + end_file
-                        writer = tf.python_io.TFRecordWriter(writefile_name)
-                        writer.write(ex.SerializeToString())
-                        writer.close()
-                        count += 1
-
-                # store current pre-processed observation in memory
-                history = [
-                    packager.getImgStack(),
-                    packager.getPntStack(),
-                    packager.getAudStack()
-                ]
-
-            if(past_actions[-1] == 2 or past_actions[-1] == 3):
-                # break if terminate action
-                break
+        if not all_timing_frames_found and t > start_time + current_time[0]:
+            # add the frame number and timing label to frame dict
+            # assumption - frame number is the same for both top and bottom images (they should be)
+            timing_dict[current_time[1]] = packager.getFrameCount()
+            if len(timing_queue) > 0:
+                current_time = heapq.heappop(timing_queue)
             else:
-                packager.reset()
+                all_timing_frames_found = True
 
-            time_log_index += 1
-
-        elif(topic == topic_names[1]):
+        if(topic == topic_names[1]):
             packager.topImgCallback(msg)
         elif(topic == topic_names[2]):
             packager.botImgCallback(msg)
         elif(topic == topic_names[3]):
             packager.audCallback(msg)
+        msg_count += 1
 
-    # need to write the TFRecord for the final interaction
-    # print("past_actions length = %s" % (len(past_actions)))
-    # check the length of past_actions, create tfrecord iff >= 2
-    if len(past_actions) >= 2:
-        pre_act = past_actions[-2]
-        cur_act = past_actions[-1]
-        next_act = -1
+    packager.formatOutput()
 
-        ex = make_sequence_example(
-            packager.getImgStack(), img_dtype,
-            packager.getPntStack(), pnt_dtype,
-            packager.getAudStack(), aud_dtype,
-            pre_act, cur_act, next_act,
-            state,
-            [],
-            [],
-            [],
-            name + '_' + str(count))
-        writefile_name = begin_file + str(cur_act) + end_file
-        writer = tf.python_io.TFRecordWriter(writefile_name)
-        writer.write(ex.SerializeToString())
-        writer.close()
+    ex = make_sequence_example(
+        packager.getTopImgStack(), img_dtype,
+        packager.getBotImgStack(), img_dtype,
+        packager.getTopPntStack(), pnt_dtype,
+        packager.getBotPntStack(), pnt_dtype,
+        packager.getAudStack(), aud_dtype,
+        timing_dict,
+        timing_filename)
+
+    # write TFRecord data to file
+    end_file = ".tfrecord"
+    if flip:
+        end_file = "_flip" + end_file
+
+    writer = tf.python_io.TFRecordWriter(out_dir + out_filename + end_file)
+    writer.write(ex.SerializeToString())
+    writer.close()
+
+    packager.reset()
 
     bag.close()
-    print("WROTE %s sequences from %s to %s" % (count, bag_filename, out_dir + out_filename))
+    print("WROTE %s frames from %s to %s" % (msg_count, bag_filename, out_dir + out_filename))
 
 
 def check(filenames):
@@ -246,65 +263,30 @@ if __name__ == '__main__':
 
     # USAGE: generate a single file and store it as a scrap.tfrecord; Used for Debugging
 
-    bagfile = os.environ["HOME"] + "/Documents/samples/success/nao_session_2017-07-27-14-07-42.bag"
+    bagfile = os.environ["HOME"] + "/Documents/samples/success/sa_0.bag"
+    timefile = os.environ["HOME"] + "/Documents/samples/success/sa_0.txt"
 
-    outfile = os.environ["HOME"] + "/Documents/samples/tfrecords/sample.tfrecord"
+    outfile = os.environ["HOME"] + "/Documents/samples/tfrecords/sa_0.tfrecord"
     outdir = os.environ["HOME"] + "/Documents/samples/tfrecords/"
 
     if(gen_single_file):
         print("GENERATING A SINGLE TEST FILE...")
-        gen_TFRecord_from_file(out_dir=outdir, out_filename="sample", bag_filename=bagfile, flip=False)
+        gen_TFRecord_from_file(out_dir=outdir, out_filename="sa_0", bag_filename=bagfile, timing_filename=timefile,
+                               flip=False)
 
 #############################
 
     # USAGE: read contents of scrap.tfrecord; Used for Debugging
+    file_set = set()
+    if view_single_file:
+        file_set.add(outfile)
+    elif view_all_files:
+        pass
 
-    if(view_single_file):
-        # Format the data to be read
-        def processData(inp, data_type):
-            data_s = tf.reshape(inp, [-1, data_type["cmp_h"], data_type["cmp_w"], data_type["num_c"]])
-            return tf.cast(data_s, tf.uint8)
-
-        # Use for visualizing Data Types
-        def show(data, d_type):
-            tout = []
-            out = []
-            for i in range(data.shape[0]):
-                imf = np.reshape(data[i], (d_type["cmp_h"], d_type["cmp_w"], d_type["num_c"]))
-
-                limit_size = 64
-
-                if(d_type["cmp_h"] > limit_size):
-                    mod = limit_size / float(d_type["cmp_h"])
-                    imf = cv2.resize(imf, None, fx=mod, fy=mod, interpolation=cv2.INTER_CUBIC)
-                if(imf.shape[2] == 2):
-                    imf = np.concatenate((imf, np.zeros((d_type["cmp_h"], d_type["cmp_w"], 1))), axis=2)
-                    imf[..., 0] = imf[..., 1]
-                    imf[..., 2] = imf[..., 1]
-                    imf = imf.astype(np.uint8)
-
-                if i % 10 == 0 and i != 0:
-                    if(len(tout) == 0):
-                        tout = out.copy()
-                    else:
-                        tout = np.concatenate((tout, out), axis=0)
-
-                    out = []
-                if(len(out) == 0):
-                    out = imf
-                else:
-                    out = np.concatenate((out, imf), axis=1)
-
-            if(data.shape[0] % 10 != 0):
-                fill = np.zeros((limit_size, limit_size * (10 - (data.shape[0] % 10)), d_type["num_c"]))
-                fill.fill(255)
-                out = np.concatenate((out, fill), axis=1)
-
-            return tout
-
-        print("READING...")
+    for f in file_set:
+        print("READING %s..." % (f))
         coord = tf.train.Coordinator()
-        filename_queue = tf.train.string_input_producer([outfile])
+        filename_queue = tf.train.string_input_producer([f])
 
         with tf.Session() as sess:
             sess.run(tf.local_variables_initializer())
@@ -313,28 +295,43 @@ if __name__ == '__main__':
             threads = tf.train.start_queue_runners(coord=coord)
 
             seq_len = context_parsed["length"]  # sequence length
-            seq_len2 = context_parsed["length_t2"]  # sequence length
-            labels = context_parsed["act"]  # label
-            labels2 = context_parsed["pos_act"]  # label
+            timing_labels = context_parsed["timing_labels"]  # timing labels
+            name = context_parsed["example_id"]  # example_id
+            timing_values = sequence_parsed["timing_values"]
+            print("===DEBUG===\ntiming_values = %s\n===/DEBUG===" % (timing_values))
 
-            img_raw = processData(sequence_parsed["image_raw"], img_dtype)
-            opt_raw = processData(sequence_parsed["points"], pnt_dtype)
-            aud_raw = processData(sequence_parsed["audio_raw"], aud_dtype)
+            top_img_raw = processData(sequence_parsed["top_img_raw"], img_dtype)
+            bot_img_raw = processData(sequence_parsed["bot_img_raw"], img_dtype)
+            top_opt_raw = processData(sequence_parsed["top_opt_raw"], pnt_dtype)
+            bot_opt_raw = processData(sequence_parsed["bot_opt_raw"], pnt_dtype)
+            aud_raw = processData(sequence_parsed["aud_raw"], aud_dtype)
 
-        for i in range(3):  # alter number of iterations to the number of files
-            l, l2, i, p, a, n, n2 = sess.run(
-                [labels, labels2, img_raw, opt_raw, aud_raw, seq_len, seq_len2])
-            print(i.shape, p.shape, a.shape, n, n2, l, l2)
+            # set range to value > 1 if multiple TFRecords stored in a single file
+            for i in range(1):
+                l, ti, bi, to, bo, a, tl, tv, n = sess.run(
+                    [seq_len,
+                     top_img_raw,
+                     bot_img_raw,
+                     top_opt_raw,
+                     bot_opt_raw,
+                     aud_raw,
+                     timing_labels,
+                     timing_values,
+                     name
+                     ])
+                print(ti.shape, bi.shape, to.shape, bo.shape, a.shape, n)
 
-            coord.request_stop()
-            coord.join(threads)
+                coord.request_stop()
+                coord.join(threads)
 
-            # display the contents of the optical flow file
-            show_from = 110
-            img = show(p[show_from:], pnt_dtype)
-            cv2.imshow("img", img)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
+                # display the contents of the optical flow file
+                show_from = 110
+                top_opt = show(ti[show_from:], img_dtype)
+                bot_opt = show(bi[show_from:], img_dtype)
+                cv2.imshow("top_opt", top_opt)
+                cv2.imshow("bot_opt", bot_opt)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
 
 #############################
 

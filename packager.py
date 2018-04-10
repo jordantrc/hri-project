@@ -59,7 +59,7 @@ class DQNPackager:
 
         # variables for optical flow
         self.frame1 = []
-        self.prvs, self.hsv = None, None
+        self.previous_frame, self.hsv = None, None
 
         # variables for audio
         self.counter = 0
@@ -84,14 +84,25 @@ class DQNPackager:
     def getRecentAct(self):
         return self.__most_recent_act
 
-    def getImgStack(self):
-        return self.__imgStack
+    def getTopImgStack(self):
+        return self.__topImgStack
 
-    def getPntStack(self):
-        return self.__pntStack
+    def getBotImgStack(self):
+        return self.__botImgStack
+
+    def getTopPntStack(self):
+        return self.__topPntStack
+
+    def getBotPntStack(self):
+        return self.__botPntStack
 
     def getAudStack(self):
         return self.__audStack
+
+    def getFrameCount(self):
+        if type(self.__topImgStack) == int:
+            return 0
+        return len(self.__topImgStack)
 
     ############################
     # Collect Data into Frames #
@@ -104,12 +115,14 @@ class DQNPackager:
         if not already_locked:
             self.__lock.acquire()
         self.clearMsgs()
-        self.__imgStack = 0
-        self.__pntStack = 0
+        self.__topImgStack = 0
+        self.__botImgStack = 0
+        self.__topPntStack = 0
+        self.__botPntStack = 0
         self.__audStack = 0
 
         self.frame1 = []
-        self.prvs, self.hsv = None, None
+        self.previous_frame, self.hsv = None, None
 
         if not already_locked:
             self.__lock.release()
@@ -155,12 +168,13 @@ class DQNPackager:
         bot_img = self.__recent_msgs[1]
         aud = self.formatAudMsg(self.__recent_msgs[2])  # process all audio data together prior to sending
 
-        if(type(self.__imgStack) == int):
-            self.__imgStack = [top_img, bot_img]
+        if(type(self.__topImgStack) == int):
+            self.__topImgStack = [top_img]
+            self.__botImgStack = [bot_img]
             self.__audStack = [aud]
         else:
-            self.__imgStack.append(top_img)
-            self.__imgStack.append(bot_img)
+            self.__topImgStack.append(top_img)
+            self.__botImgStack.append(bot_img)
             self.__audStack.append(aud)
 
         self.clearMsgs()
@@ -174,10 +188,15 @@ class DQNPackager:
         # pre-process the RGB input and generate the optical flow
         img_out, pnt_out = [], []
 
-        for x in img_stack:
+        for i, x in enumerate(img_stack):
             img = self.formatImg(x)
+            if i == 0:
+                self.frame1 = img
             img_out.append(np.asarray(img).flatten())
             pnt_out.append(self.formatOpt(img))
+
+        # reset self.previous_frame
+        self.previous_frame = None
 
         return img_out, pnt_out
 
@@ -230,26 +249,26 @@ class DQNPackager:
         # generate optical flow
         mod = pnt_dtype["cmp_h"] / float(img_dtype["cmp_h"])
         img = cv2.resize(img_src.copy(), None, fx=mod, fy=mod, interpolation=cv2.INTER_CUBIC)
+        
+        if self.previous_frame is None:
+            self.previous_frame = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
         opt_img = np.zeros(img.shape)[..., 0]
 
-        if len(self.frame1) == 0:
-            # if img is the first frame then set optical flow to be black screen
-            self.frame1 = img
-            self.prvs = cv2.cvtColor(self.frame1, cv2.COLOR_BGR2GRAY)
+        # generate optical flow
+        frame2 = img
+        next_frame = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
+        next_frame_size = "%shx%sw" % (next_frame.shape[0], next_frame.shape[1])
+        prev_frame_size = "%shx%sw" % (self.previous_frame.shape[0], self.previous_frame.shape[1])
 
-        else:
-            frame2 = img
+        # print("===DEBUG===\nprev_frame_size = %s\nnext_frame_size = %s\n===/DEBUG===" % (next_frame_size, prev_frame_size))
+        flow = cv2.calcOpticalFlowFarneback(self.previous_frame, next_frame, None, 0.5, 1, 2, 5, 7, 1.5, 1)
 
-            # generate optical flow
-            next = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
-            flow = cv2.calcOpticalFlowFarneback(self.prvs, next, 0.5, 1, 2, 5, 7, 1.5, 1)
-
-            mag, ang = cv2.cartToPolar(flow[..., 0], flow[..., 1])
-            # normalize the magnitude to between 0 and 255 (replace with other normalize to prevent precission issues)
-            mag = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
-            opt_img = mag
-            self.prvs = next
+        mag, ang = cv2.cartToPolar(flow[..., 0], flow[..., 1])
+        # normalize the magnitude to between 0 and 255 (replace with other normalize to prevent precission issues)
+        mag = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
+        opt_img = mag
+        self.previous_frame = next_frame
 
         return np.asarray(opt_img).flatten()
 
@@ -257,9 +276,8 @@ class DQNPackager:
         # perform pre-processing on the audio input
 
         num_frames = len(aud_msg_array)
+        # print('===formatAudBatch DEBUG===\nnum_frames = %s\n===/DEBUG===' % (num_frames))
         input_data = np.reshape(aud_msg_array, (num_frames * len(aud_msg_array[0])))
-
-        # modify data
         core_data = input_data
 
         # mute the first 2 seconds of audio (where the NAO speaks)
@@ -284,8 +302,6 @@ class DQNPackager:
         # generate spectrogram
         S = librosa.feature.melspectrogram(y=filtered_input, sr=self.rate, n_mels=128, fmax=8000)
         S = librosa.power_to_db(S, ref=np.max)
-
-        arr = []
 
         # split the spectrogram into A_i. This generates an overlap between
         # frames with as set stride
@@ -316,10 +332,13 @@ class DQNPackager:
 
     def formatOutput(self, name=""):
         # Execute pre-processing on all strored input
-        img_stack, opt_stack = self.formatImgBatch(self.__imgStack, name)
+        top_img_stack, top_opt_stack = self.formatImgBatch(self.__topImgStack, name)
+        bot_img_stack, bot_opt_stack = self.formatImgBatch(self.__botImgStack, name)
 
-        self.__imgStack = np.expand_dims(img_stack, axis=0)
-        self.__pntStack = np.expand_dims(opt_stack, axis=0)
+        self.__topImgStack = np.expand_dims(top_img_stack, axis=0)
+        self.__topPntStack = np.expand_dims(top_opt_stack, axis=0)
+        self.__botImgStack = np.expand_dims(bot_img_stack, axis=0)
+        self.__botPntStack = np.expand_dims(bot_opt_stack, axis=0)
         self.__audStack = np.expand_dims(self.formatAudBatch(self.__audStack, name), axis=0)
 
     def getNextAction(self, num_prompt, verbose=False):
