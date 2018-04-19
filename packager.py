@@ -63,7 +63,8 @@ class DQNPackager:
 
         # variables for audio
         self.counter = 0
-        src_dir = rospkg.RosPack().get_path('deep_reinforcement_abstract_lfd') + '/src/dqn/'
+        # src_dir = rospkg.RosPack().get_path('deep_reinforcement_abstract_lfd') + '/src/dqn/'
+        src_dir = './'
         self.__face_cascade = cv2.CascadeClassifier(src_dir + 'haarcascade_frontalface_default.xml')
         self.rate = 16000  # Sampling rate
 
@@ -87,8 +88,14 @@ class DQNPackager:
     def getTopImgStack(self):
         return self.__topImgStack
 
+    def getTopGrsStack(self):
+        return self.__topGrsStack
+
     def getBotImgStack(self):
         return self.__botImgStack
+
+    def getBotGrsStack(self):
+        return self.__botGrsStack
 
     def getTopPntStack(self):
         return self.__topPntStack
@@ -116,7 +123,9 @@ class DQNPackager:
             self.__lock.acquire()
         self.clearMsgs()
         self.__topImgStack = 0
+        self.__topGrsStack = 0
         self.__botImgStack = 0
+        self.__botGrsStack = 0
         self.__topPntStack = 0
         self.__botPntStack = 0
         self.__audStack = 0
@@ -186,19 +195,21 @@ class DQNPackager:
 
     def formatImgBatch(self, img_stack, name=""):
         # pre-process the RGB input and generate the optical flow
-        img_out, pnt_out = [], []
+        img_out, grs_out, pnt_out = [], [], []
 
         for i, x in enumerate(img_stack):
-            img = self.formatImg(x)
+            # img is RGB, grs is grayscale
+            img, grs = self.formatImg(x)
             if i == 0:
                 self.frame1 = img
             img_out.append(np.asarray(img).flatten())
+            grs_out.append(np.asarray(grs).flatten())
             pnt_out.append(self.formatOpt(img))
 
         # reset self.previous_frame
         self.previous_frame = None
 
-        return img_out, pnt_out
+        return img_out, grs_out, pnt_out
 
     def formatImg(self, img_msg):
         # pre-process the image data to crop it to an appropriate size
@@ -243,7 +254,9 @@ class DQNPackager:
             # if flip set to true then mirror the image horizontally
             img = np.flip(img, 1)
 
-        return img
+        gray_final = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        return img, gray_final
 
     def formatOpt(self, img_src):
         # generate optical flow
@@ -332,12 +345,14 @@ class DQNPackager:
 
     def formatOutput(self, name=""):
         # Execute pre-processing on all strored input
-        top_img_stack, top_opt_stack = self.formatImgBatch(self.__topImgStack, name)
-        bot_img_stack, bot_opt_stack = self.formatImgBatch(self.__botImgStack, name)
+        top_img_stack, top_grs_stack, top_opt_stack = self.formatImgBatch(self.__topImgStack, name)
+        bot_img_stack, bot_grs_stack, bot_opt_stack = self.formatImgBatch(self.__botImgStack, name)
 
         self.__topImgStack = np.expand_dims(top_img_stack, axis=0)
+        self.__topGrsStack = np.expand_dims(top_grs_stack, axis=0)
         self.__topPntStack = np.expand_dims(top_opt_stack, axis=0)
         self.__botImgStack = np.expand_dims(bot_img_stack, axis=0)
+        self.__botGrsStack = np.expand_dims(bot_grs_stack, axis=0)
         self.__botPntStack = np.expand_dims(bot_opt_stack, axis=0)
         self.__audStack = np.expand_dims(self.formatAudBatch(self.__audStack, name), axis=0)
 

@@ -4,9 +4,9 @@ import numpy as np
 from constants import *
 
 
-def make_sequence_example(top_img_input, top_img_data, bot_img_input, bot_img_data, top_opt_input,
-                          top_opt_data, bot_opt_input, bot_opt_data, aud_input, aud_data, timing_dict,
-                          example_id):
+def make_sequence_example(top_img_input, top_img_data, top_grs_input, top_grs_data, bot_img_input, bot_img_data,
+                          bot_grs_input, bot_grs_data, top_opt_input, top_opt_data, bot_opt_input, bot_opt_data,
+                          aud_input, aud_data, timing_dict, example_id):
     '''generates the tfrecord sequence
     from: https://github.com/AssistiveRoboticsUNH/TR-LfD/blob/master/itbn_lfd/itbn_model/src/itbn_classifier/common/itbn_tfrecord_rw.py
     '''
@@ -20,9 +20,17 @@ def make_sequence_example(top_img_input, top_img_data, bot_img_input, bot_img_da
     ex.context.feature["top_img_w"].int64_list.value.append(top_img_data["cmp_w"])
     ex.context.feature["top_img_c"].int64_list.value.append(top_img_data["num_c"])
 
+    ex.context.feature["top_grs_h"].int64_list.value.append(top_grs_data["cmp_h"])
+    ex.context.feature["top_grs_w"].int64_list.value.append(top_grs_data["cmp_w"])
+    ex.context.feature["top_grs_c"].int64_list.value.append(top_grs_data["num_c"])
+
     ex.context.feature["bot_img_h"].int64_list.value.append(bot_img_data["cmp_h"])
     ex.context.feature["bot_img_w"].int64_list.value.append(bot_img_data["cmp_w"])
     ex.context.feature["bot_img_c"].int64_list.value.append(bot_img_data["num_c"])
+
+    ex.context.feature["bot_grs_h"].int64_list.value.append(bot_grs_data["cmp_h"])
+    ex.context.feature["bot_grs_w"].int64_list.value.append(bot_grs_data["cmp_w"])
+    ex.context.feature["bot_grs_c"].int64_list.value.append(bot_grs_data["num_c"])
 
     ex.context.feature["top_pnt_h"].int64_list.value.append(top_opt_data["cmp_h"])
     ex.context.feature["top_pnt_w"].int64_list.value.append(top_opt_data["cmp_w"])
@@ -52,7 +60,9 @@ def make_sequence_example(top_img_input, top_img_data, bot_img_input, bot_img_da
         fl_data.append(np.asarray(data).astype(dtype).tostring())
 
     load_array(ex, "top_img_raw", top_img_input, np.uint8)
+    load_array(ex, "top_grs_raw", top_grs_input, np.uint8)
     load_array(ex, "bot_img_raw", bot_img_input, np.uint8)
+    load_array(ex, "bot_grs_raw", bot_grs_input, np.uint8)
     load_array(ex, "top_opt_raw", top_opt_input, np.uint8)
     load_array(ex, "bot_opt_raw", bot_opt_input, np.uint8)
     load_array(ex, "aud_raw", aud_input, np.uint8)
@@ -74,9 +84,17 @@ def parse_sequence_example(filename_queue):
         "top_img_w": tf.FixedLenFeature([], dtype=tf.int64),
         "top_img_c": tf.FixedLenFeature([], dtype=tf.int64),
 
+        "top_grs_h": tf.FixedLenFeature([], dtype=tf.int64),
+        "top_grs_w": tf.FixedLenFeature([], dtype=tf.int64),
+        "top_grs_c": tf.FixedLenFeature([], dtype=tf.int64),
+
         "bot_img_h": tf.FixedLenFeature([], dtype=tf.int64),
         "bot_img_w": tf.FixedLenFeature([], dtype=tf.int64),
         "bot_img_c": tf.FixedLenFeature([], dtype=tf.int64),
+
+        "bot_grs_h": tf.FixedLenFeature([], dtype=tf.int64),
+        "bot_grs_w": tf.FixedLenFeature([], dtype=tf.int64),
+        "bot_grs_c": tf.FixedLenFeature([], dtype=tf.int64),
 
         "top_pnt_h": tf.FixedLenFeature([], dtype=tf.int64),
         "top_pnt_w": tf.FixedLenFeature([], dtype=tf.int64),
@@ -97,7 +115,9 @@ def parse_sequence_example(filename_queue):
 
     sequence_features = {
         "top_img_raw": tf.FixedLenSequenceFeature([], dtype=tf.string),
+        "top_grs_raw": tf.FixedLenSequenceFeature([], dtype=tf.string),
         "bot_img_raw": tf.FixedLenSequenceFeature([], dtype=tf.string),
+        "bot_grs_raw": tf.FixedLenSequenceFeature([], dtype=tf.string),
         "top_opt_raw": tf.FixedLenSequenceFeature([], dtype=tf.string),
         "bot_opt_raw": tf.FixedLenSequenceFeature([], dtype=tf.string),
         "aud_raw": tf.FixedLenSequenceFeature([], dtype=tf.string),
@@ -113,7 +133,9 @@ def parse_sequence_example(filename_queue):
 
     sequence_data = {
         "top_img_raw": tf.decode_raw(sequence_parsed["top_img_raw"], tf.uint8),
+        "top_grs_raw": tf.decode_raw(sequence_parsed["top_grs_raw"], tf.uint8),
         "bot_img_raw": tf.decode_raw(sequence_parsed["bot_img_raw"], tf.uint8),
+        "bot_grs_raw": tf.decode_raw(sequence_parsed["bot_grs_raw"], tf.uint8),
         "top_opt_raw": tf.decode_raw(sequence_parsed["top_opt_raw"], tf.uint8),
         "bot_opt_raw": tf.decode_raw(sequence_parsed["bot_opt_raw"], tf.uint8),
         "aud_raw": tf.decode_raw(sequence_parsed["aud_raw"], tf.float64),

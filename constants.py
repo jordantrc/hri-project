@@ -14,6 +14,15 @@ img_dtype = {
     "cmp_w": img_size
 }
 
+grs_dtype = {
+    "name": "grs",
+    "img_h": img_h,
+    "img_w": img_w,
+    "num_c": 1,
+    "cmp_h": img_size,
+    "cmp_w": img_size
+}
+
 pnt_dtype = {
     "name": "pnt",
     "img_h": img_h,

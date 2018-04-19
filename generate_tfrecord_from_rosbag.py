@@ -71,6 +71,8 @@ def processData(inp, data_type):
 def show(data, d_type):
     tout = []
     out = []
+    # print("===DEBUG===\nshow fn\ndata.shape=%s\n===/DEBUG===" % (data))
+    frame_limit = 0
     for i in range(data.shape[0]):
         imf = np.reshape(data[i], (d_type["cmp_h"], d_type["cmp_w"], d_type["num_c"]))
 
@@ -100,7 +102,7 @@ def show(data, d_type):
             out = imf
         else:
             out = np.concatenate((out, imf), axis=1)
-    if (data.shape[0] % frame_limit != 0):
+    if frame_limit != 0 and data.shape[0] % frame_limit != 0:
         fill = np.zeros((d_type["cmp_h"], d_type["cmp_w"] * (frame_limit -
                                                              (data.shape[0] % frame_limit)),
                          d_type["num_c"]))  # .fill(255)
@@ -112,6 +114,8 @@ def show(data, d_type):
         else:
             tout = np.concatenate((tout, out), axis=0)
         return tout
+
+    return None
 
 
 def gen_TFRecord_from_file(out_dir, out_filename, bag_filename, timing_filename, flip=False):
@@ -205,7 +209,9 @@ def gen_TFRecord_from_file(out_dir, out_filename, bag_filename, timing_filename,
 
     ex = make_sequence_example(
         packager.getTopImgStack(), img_dtype,
+        packager.getTopGrsStack(), grs_dtype,
         packager.getBotImgStack(), img_dtype,
+        packager.getBotGrsStack(), grs_dtype,
         packager.getTopPntStack(), pnt_dtype,
         packager.getBotPntStack(), pnt_dtype,
         packager.getAudStack(), aud_dtype,
@@ -263,11 +269,12 @@ if __name__ == '__main__':
 
     # USAGE: generate a single file and store it as a scrap.tfrecord; Used for Debugging
 
-    bagfile = os.environ["HOME"] + "/Documents/samples/success/sa_0.bag"
-    timefile = os.environ["HOME"] + "/Documents/samples/success/sa_0.txt"
+    root_dir = "/home/assistive-robotics/object_naming_dataset/"
+    bagfile = root_dir + "bags/subject1/successA/sa_0.bag"
+    timefile = root_dir + "temp_info/subject1/successA/sa_0.txt"
 
-    outfile = os.environ["HOME"] + "/Documents/samples/tfrecords/sa_0.tfrecord"
-    outdir = os.environ["HOME"] + "/Documents/samples/tfrecords/"
+    outfile = root_dir + "tfrecords/subject1/successA/sa_0.tfrecord"
+    outdir = root_dir + "tfrecords/subject1/successA/"
 
     if(gen_single_file):
         print("GENERATING A SINGLE TEST FILE...")
@@ -301,17 +308,21 @@ if __name__ == '__main__':
             print("===DEBUG===\ntiming_values = %s\n===/DEBUG===" % (timing_values))
 
             top_img_raw = processData(sequence_parsed["top_img_raw"], img_dtype)
+            top_grs_raw = processData(sequence_parsed["top_grs_raw"], grs_dtype)
             bot_img_raw = processData(sequence_parsed["bot_img_raw"], img_dtype)
+            bot_grs_raw = processData(sequence_parsed["bot_grs_raw"], grs_dtype)
             top_opt_raw = processData(sequence_parsed["top_opt_raw"], pnt_dtype)
             bot_opt_raw = processData(sequence_parsed["bot_opt_raw"], pnt_dtype)
             aud_raw = processData(sequence_parsed["aud_raw"], aud_dtype)
 
             # set range to value > 1 if multiple TFRecords stored in a single file
             for i in range(1):
-                l, ti, bi, to, bo, a, tl, tv, n = sess.run(
+                l, ti, tg, bi, bg, to, bo, a, tl, tv, n = sess.run(
                     [seq_len,
                      top_img_raw,
+                     top_grs_raw,
                      bot_img_raw,
+                     bot_grs_raw,
                      top_opt_raw,
                      bot_opt_raw,
                      aud_raw,
@@ -319,19 +330,26 @@ if __name__ == '__main__':
                      timing_values,
                      name
                      ])
-                print(ti.shape, bi.shape, to.shape, bo.shape, a.shape, n)
+                print(ti.shape, tg.shape, bi.shape, bg.shape, to.shape, bo.shape, a.shape, n)
 
                 coord.request_stop()
                 coord.join(threads)
 
-                # display the contents of the optical flow file
+                # display the contents of the optical flow and image files
                 show_from = 110
-                top_opt = show(ti[show_from:], img_dtype)
-                bot_opt = show(bi[show_from:], img_dtype)
-                cv2.imshow("top_opt", top_opt)
-                cv2.imshow("bot_opt", bot_opt)
-                cv2.waitKey(0)
-                cv2.destroyAllWindows()
+                top_opt = show(to[show_from:], pnt_dtype)
+                bot_opt = show(bo[show_from:], pnt_dtype)
+                top_img = show(ti[show_from:], img_dtype)
+                bot_img = show(bi[show_from:], img_dtype)
+                top_grs_img = show(tg[show_from:], grs_dtype)
+                bot_grs_img = show(bg[show_from:], grs_dtype)
+
+                cv2.imwrite("top_opt.jpg", top_opt)
+                cv2.imwrite("bot_opt.jpg", bot_opt)
+                cv2.imwrite("top_img.jpg", top_img)
+                cv2.imwrite("bot_img.jpg", bot_img)
+                cv2.imwrite("top_grs_img.jpg", top_grs_img)
+                cv2.imwrite("bot_grs_img.jpg", bot_grs_img)
 
 #############################
 
