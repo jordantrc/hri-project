@@ -10,6 +10,7 @@
 # Updated for the two-camera dataset
 
 
+import random
 import tensorflow as tf
 import numpy as np
 
@@ -259,9 +260,10 @@ def check(filenames):
 
 
 if __name__ == '__main__':
-    gen_single_file = True
-    view_single_file = True
-    process_all_files = False
+    gen_single_file = False
+    view_single_file = False
+    process_all_files = True
+    view_all_files = False
 
     rospy.init_node('gen_tfrecord', anonymous=True)
 
@@ -280,6 +282,45 @@ if __name__ == '__main__':
         print("GENERATING A SINGLE TEST FILE...")
         gen_TFRecord_from_file(out_dir=outdir, out_filename="sa_0", bag_filename=bagfile, timing_filename=timefile,
                                flip=False)
+    elif(process_all_files):
+        # setup input and output directory information
+        dataset_root_dir = "/home/assistive-robotics/object_naming_dataset/"
+        tfrecord_output_dir = dataset_root_dir + "tfrecords/"
+
+        # look for subjects in the bags directory
+        bag_dir = dataset_root_dir + "bags/"
+        temp_dir = dataset_root_dir + "temp_info/"
+        subjects = os.listdir(bag_dir)
+
+        for su in subjects:
+            subject_bag_dir = bag_dir + su + "/"
+            subject_temp_dir = temp_dir + su + "/"
+
+            # process all samples for the subject
+            samples = os.listdir(subject_bag_dir)
+            for sa in samples:
+                sample_bag_dir = subject_bag_dir + sa + "/"
+                sample_temp_dir = subject_temp_dir + sa + "/"
+
+                # process all segments for the sample
+                segments = os.listdir(sample_bag_dir)
+                for se in segments:
+                    flip_segment = False
+                    if random.randint(0, 1) == 1:
+                        # flip with 50/50 chance
+                        flip_segment = True
+
+                    base_name, extension = se.split(".")
+
+                    segment_bag_path = sample_bag_dir + se
+                    segment_temp_path = sample_temp_dir + base_name + ".txt"
+
+                    print("GENERATING TFRecord for %s..." % (segment_bag_path))
+                    outfile_name = "%s_%s_%s.tfrecord" % (su, sa, base_name)
+                    print(outfile_name)
+                    #gen_TFRecord_from_file(out_dir=tfrecord_output_dir, out_filename=outfile_name,
+                    #                       bag_filename=segment_bag_path, timing_filename=segment_temp_path,
+                    #                       flip=flip_segment)
 
 #############################
 
@@ -350,66 +391,3 @@ if __name__ == '__main__':
                 cv2.imwrite("bot_img.jpg", bot_img)
                 cv2.imwrite("top_grs_img.jpg", top_grs_img)
                 cv2.imwrite("bot_grs_img.jpg", bot_grs_img)
-
-#############################
-
-    # USAGE: write all rosbag demonstrations to TFRecords
-
-    '''
-    We assume that the file structure for the demonstartions is ordered as follows:
-
-        -<demonstration_path>
-            -<subject_id>_0
-                -compliant
-                    -<demonstration_name_0>.bag
-                    -<demonstration_name_1>.bag
-                    -<demonstration_name_2>.bag
-                -noncompliant
-                    -<demonstration_name_0>.bag
-
-            -<subject_id>_1
-            -<subject_id>_2
-
-        -<tfrecord_output_directory>
-
-    '''
-
-    # setup input directory information
-    demonstration_path = os.environ["HOME"] + '/' + "Documents/AssistiveRobotics/AutismAssistant/pomdpData/"
-    subject_id = "long_sess"
-
-    # setup output directory information
-    tfrecord_output_directory = os.environ["HOME"] + '/' + "catkin_ws/src/deep_q_network/tfrecords/long/"
-
-    if(process_all_files):
-
-        for i in range(1, 12):  # each unique subject
-            subject_dir = demonstration_path + subject_id + '_'
-
-            if(i < 10):  # fix naming issues with leading 0s
-                subject_dir += '0'
-            subject_dir += str(i) + '/'
-
-            for s in ["compliant", "noncompliant"]:  # each unique state
-                subject_dir += s + '/'
-
-                # get list of demonstration file names
-                filename_list = [subject_dir + f for f in os.listdir(subject_dir) if isfile(join(subject_dir, f))]
-                filename_list.sort()
-
-                for f in filename_list:
-                    # get demonstration name for output file name
-                    tag = f
-                    while(tag.find("/") >= 0):
-                        tag = tag[tag.find("/") + 1:]
-                    tag = tag[:-(len(".bag"))]
-                    new_name = subject_id + '_' + str(i) + '_' + tag
-
-                    # print files to make it clear process still running
-                    print(tag + "......." + new_name)
-
-                    gen_TFRecord_from_file(out_dir=tfrecord_output_directory,
-                                           out_filename=new_name, bag_filename=f, flip=False)
-
-                    gen_TFRecord_from_file(out_dir=tfrecord_output_directory,
-                                           out_filename=new_name, bag_filename=f, flip=True)
