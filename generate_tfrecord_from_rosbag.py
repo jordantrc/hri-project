@@ -52,9 +52,13 @@ def read_timing_file(filename):
     line = ifile.readline()
     while len(line) != 0:
         line = line.split()
-        event_time = float(line[1])
-        event_time = rospy.Duration(event_time)
-        timing_queue.append((event_time, line[0]))
+        try:
+            event_label = line[0]
+            event_time = float(line[1])
+            event_time = rospy.Duration(event_time)
+            timing_queue.append((event_time, event_label))
+        except IndexError:
+            print("## ERROR ## timing file [%s] line [%s] invalid" % (filename, str(line)))
         line = ifile.readline()
     heapq.heapify(timing_queue)
     ifile.close()
@@ -220,11 +224,7 @@ def gen_TFRecord_from_file(out_dir, out_filename, bag_filename, timing_filename,
         timing_filename)
 
     # write TFRecord data to file
-    end_file = ".tfrecord"
-    if flip:
-        end_file = "_flip" + end_file
-
-    writer = tf.python_io.TFRecordWriter(out_dir + out_filename + end_file)
+    writer = tf.python_io.TFRecordWriter(out_dir + out_filename)
     writer.write(ex.SerializeToString())
     writer.close()
 
@@ -272,24 +272,23 @@ if __name__ == '__main__':
     # USAGE: generate a single file and store it as a scrap.tfrecord; Used for Debugging
 
     root_dir = "/home/assistive-robotics/object_naming_dataset/"
-    bagfile = root_dir + "bags/subject1/successA/sa_0.bag"
-    timefile = root_dir + "temp_info/subject1/successA/sa_0.txt"
-
-    outfile = root_dir + "tfrecords/subject1/successA/sa_0.tfrecord"
-    outdir = root_dir + "tfrecords/subject1/successA/"
 
     if(gen_single_file):
         print("GENERATING A SINGLE TEST FILE...")
+        bagfile = root_dir + "bags/subject1/successA/sa_0.bag"
+        timefile = root_dir + "temp_info/subject1/successA/sa_0.txt"
+
+        outfile = root_dir + "tfrecords/subject1_successA_sa_0.tfrecord"
+        outdir = root_dir + "tfrecords/"
         gen_TFRecord_from_file(out_dir=outdir, out_filename="sa_0", bag_filename=bagfile, timing_filename=timefile,
                                flip=False)
     elif(process_all_files):
         # setup input and output directory information
-        dataset_root_dir = "/home/assistive-robotics/object_naming_dataset/"
-        tfrecord_output_dir = dataset_root_dir + "tfrecords/"
+        tfrecord_output_dir = root_dir + "tfrecords/"
 
         # look for subjects in the bags directory
-        bag_dir = dataset_root_dir + "bags/"
-        temp_dir = dataset_root_dir + "temp_info/"
+        bag_dir = root_dir + "bags/"
+        temp_dir = root_dir + "temp_info/"
         subjects = os.listdir(bag_dir)
 
         for su in subjects:
@@ -316,11 +315,14 @@ if __name__ == '__main__':
                     segment_temp_path = sample_temp_dir + base_name + ".txt"
 
                     print("GENERATING TFRecord for %s..." % (segment_bag_path))
-                    outfile_name = "%s_%s_%s.tfrecord" % (su, sa, base_name)
-                    print(outfile_name)
-                    #gen_TFRecord_from_file(out_dir=tfrecord_output_dir, out_filename=outfile_name,
-                    #                       bag_filename=segment_bag_path, timing_filename=segment_temp_path,
-                    #                       flip=flip_segment)
+                    if flip_segment:
+                        outfile_name = "%s_%s_%s_flip.tfrecord" % (su, sa, base_name)
+                    else:
+                        outfile_name = "%s_%s_%s.tfrecord" % (su, sa, base_name)
+                    print("Saving TFRecord to %s" % (outfile_name))
+                    gen_TFRecord_from_file(out_dir=tfrecord_output_dir, out_filename=outfile_name,
+                                           bag_filename=segment_bag_path, timing_filename=segment_temp_path,
+                                           flip=flip_segment)
 
 #############################
 
