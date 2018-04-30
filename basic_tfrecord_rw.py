@@ -75,7 +75,7 @@ def make_sequence_example(top_img_input, top_img_data, top_grs_input, top_grs_da
 def parse_sequence_example(filename_queue):
     # reads a TFRecord into its constituent parts
     reader = tf.TFRecordReader()
-    _, example = reader.read(filename_queue)
+    _, serialized_example = reader.read(filename_queue)
 
     context_features = {
         "length": tf.FixedLenFeature([], dtype=tf.int64),
@@ -126,7 +126,7 @@ def parse_sequence_example(filename_queue):
 
     # Parse the example
     context_parsed, sequence_parsed = tf.parse_single_sequence_example(
-        serialized=example,
+        serialized=serialized_example,
         context_features=context_features,
         sequence_features=sequence_features
     )

@@ -46,16 +46,29 @@ p  - how many prompts had been delivered before s
 
 
 def read_timing_file(filename):
-    '''reads timing file'''
+    '''reads timing file
+    format of the file is:
+    label_sequence_[s|e] time
+    s = start
+    e = end
+    time is formatted as ss.mm
+    '''
     ifile = open(filename, 'r')
     timing_queue = []
     line = ifile.readline()
     while len(line) != 0:
         line = line.split()
         try:
-            event_label = line[0]
+            event_data = line[0]
             event_time = float(line[1])
             event_time = rospy.Duration(event_time)
+
+            # get the label from the event data
+            if event_data.count('_') == 2:
+                event_label, _, _ = event_data.split('_')
+            else:
+                event_label, _ = event_data.split('_')
+
             timing_queue.append((event_time, event_label))
         except IndexError:
             print("## ERROR ## timing file [%s] line [%s] invalid" % (filename, str(line)))
