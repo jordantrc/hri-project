@@ -201,6 +201,10 @@ def gen_TFRecord_from_file(out_dir, out_filename, bag_filename, timing_filename,
     msg_count = 0
 
     for topic, msg, t in bag.read_messages(topics=topic_names):
+        # TODO
+        # Need to fix this section, create one tfrecord per sequence, rather than
+        # once giant sequence. Assign the label to the sequence.
+
         # DEBUG
         # print("===DEBUG===\ntopic = %s\nmsg = %s\nt = %s\n===/DEBUG===" % (topic, msg, t))
         if start_time is None:
