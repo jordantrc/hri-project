@@ -1,9 +1,13 @@
 PARAMS_FILE = "params_file.txt"
 
+CLASSES = ["abort", "command", "correct", "incorrect", "prompt", "reward", "visual"]
+
 img_h = 480
 img_w = 640
 img_size = 299
 c_size = 64
+aud_h = 128
+aud_w = 8
 
 img_dtype = {
     "name": "img",
@@ -37,6 +41,6 @@ aud_dtype = {
     "img_h": img_h,
     "img_w": img_w,
     "num_c": 1,
-    "cmp_h": 128,
-    "cmp_w": 8
+    "cmp_h": aud_h,
+    "cmp_w": aud_w
 }

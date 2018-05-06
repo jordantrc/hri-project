@@ -6,7 +6,6 @@
 # Pre-processing for the two-camera dataset.
 #
 
-import tensorflow as tf
 import numpy as np
 
 from constants import *
@@ -15,22 +14,20 @@ import math
 import threading
 
 # ROS
-import rospy, rospkg
+import rospy
 from std_msgs.msg import Int8
 from sensor_msgs.msg import Image
 
 # image pre-processing and optical flow generation
 import cv2
-from cv_bridge import CvBridge, CvBridgeError
+from cv_bridge import CvBridge
 
 # audio pre-processing
 from nao_msgs.msg import AudioBuffer
 from noise_subtraction import reduce_noise
 from scipy import signal
-import librosa, librosa.display
-
-# DQN
-from dqn_model import DQNModel
+import librosa
+import librosa.display
 
 topic_names = [
     '/action_started',
@@ -188,6 +185,7 @@ class DQNPackager:
 
         self.clearMsgs()
         self.__lock.release()
+        
 
     ###############
     # Format Data #
@@ -197,17 +195,18 @@ class DQNPackager:
         # pre-process the RGB input and generate the optical flow
         img_out, grs_out, pnt_out = [], [], []
 
-        for i, x in enumerate(img_stack):
-            # img is RGB, grs is grayscale
-            img, grs = self.formatImg(x)
-            if i == 0:
-                self.frame1 = img
-            img_out.append(np.asarray(img).flatten())
-            grs_out.append(np.asarray(grs).flatten())
-            pnt_out.append(self.formatOpt(img))
+        if type(img_stack) != int:
+            for i, x in enumerate(img_stack):
+                # img is RGB, grs is grayscale
+                img, grs = self.formatImg(x)
+                if i == 0:
+                    self.frame1 = img
+                img_out.append(np.asarray(img).flatten())
+                grs_out.append(np.asarray(grs).flatten())
+                pnt_out.append(self.formatOpt(img))
 
-        # reset self.previous_frame
-        self.previous_frame = None
+            # reset self.previous_frame
+            self.previous_frame = None
 
         return img_out, grs_out, pnt_out
 
