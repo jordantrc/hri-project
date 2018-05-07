@@ -27,6 +27,15 @@ grs_dtype = {
     "cmp_w": img_size
 }
 
+grs_resize_dtype = {
+    "name": "grs_resize",
+    "img_h": 64,
+    "img_w": 64,
+    "num_c": 1,
+    "cmp_h": 64,
+    "cmp_w": 64
+}
+
 pnt_dtype = {
     "name": "pnt",
     "img_h": img_h,
