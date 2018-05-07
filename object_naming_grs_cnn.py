@@ -21,7 +21,7 @@ from basic_tfrecord_rw import *
 from constants import *
 
 # PARAMETERS
-TRAIN_SET_SIZE = 0.5
+TRAIN_SET_SIZE = 0.9
 EPOCHS = 5000
 BATCH_SIZE = 20
 LEARNING_RATE = 1e-4
@@ -328,7 +328,7 @@ def plot_confusion_matrix(cm, classes, filename,
 
     print(cm)
 
-    thresh = cm.max() * 0.75
+    thresh = cm.max() * 0.73
     for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
         plt.text(j, i, "{0:.4f}".format(cm[i, j]),
                  horizontalalignment="center",

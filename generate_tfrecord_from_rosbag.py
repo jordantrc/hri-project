@@ -424,7 +424,7 @@ if __name__ == '__main__':
             bot_grs_img = show(bg[show_from:], grs_dtype)
             #audio_img = show(a[show_from:], aud_dtype)
 
-            cv2.imwrite("./images/" + f + "top_opt" + str(record) + ".jpg", top_opt)
+            cv2.imwrite("./images/top_opt" + str(record) + ".jpg", top_opt)
             cv2.imwrite("./images/bot_opt" + str(record) + ".jpg", bot_opt)
             cv2.imwrite("./images/top_img" + str(record) + ".jpg", top_img)
             cv2.imwrite("./images/bot_img" + str(record) + ".jpg", bot_img)
