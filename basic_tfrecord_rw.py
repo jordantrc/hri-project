@@ -137,7 +137,7 @@ def parse_sequence_example(filename_queue):
         "bot_grs_raw": tf.decode_raw(sequence_parsed["bot_grs_raw"], tf.uint8),
         "top_opt_raw": tf.decode_raw(sequence_parsed["top_opt_raw"], tf.uint8),
         "bot_opt_raw": tf.decode_raw(sequence_parsed["bot_opt_raw"], tf.uint8),
-        "aud_raw": tf.decode_raw(sequence_parsed["aud_raw"], tf.float64),
+        "aud_raw": tf.decode_raw(sequence_parsed["aud_raw"], tf.uint8),
     }
 
     return context_parsed, sequence_data

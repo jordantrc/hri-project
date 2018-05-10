@@ -119,7 +119,8 @@ def read_timing_file(filename, flip):
 
 # Format the data to be read
 def processData(inp, data_type):
-    #print(tf.shape(inp))
+    print(data_type)
+    print("data type %s, data shape %s" % (type(inp), tf.shape(inp)))
     data_s = tf.reshape(inp, [-1, data_type["cmp_h"], data_type["cmp_w"], data_type["num_c"]])
     return tf.cast(data_s, tf.uint8)
 
@@ -396,10 +397,10 @@ if __name__ == '__main__':
             bot_grs_raw = processData(sequence_parsed["bot_grs_raw"], grs_dtype)
             top_opt_raw = processData(sequence_parsed["top_opt_raw"], pnt_dtype)
             bot_opt_raw = processData(sequence_parsed["bot_opt_raw"], pnt_dtype)
-            #aud_raw = processData(sequence_parsed["aud_raw"], aud_dtype)
+            aud_raw = processData(sequence_parsed["aud_raw"], aud_dtype)
 
             # set range to value > 1 if multiple TFRecords stored in a single file
-            l, ti, tg, bi, bg, to, bo, la = sess.run(
+            l, ti, tg, bi, bg, to, bo, a, la = sess.run(
                 [seq_len,
                  top_img_raw,
                  top_grs_raw,
@@ -407,9 +408,11 @@ if __name__ == '__main__':
                  bot_grs_raw,
                  top_opt_raw,
                  bot_opt_raw,
+                 aud_raw,
                  label
                  ])
-            print("SHAPES: ", l, ti.shape, tg.shape, bi.shape, bg.shape, to.shape, bo.shape, la.shape)
+            print("SHAPES: ", l, ti.shape, tg.shape, bi.shape, bg.shape, to.shape, bo.shape, a.shape, la.shape)
+            #print("Audio data:\n%s" % (a))
 
             coord.request_stop()
             coord.join(threads)
@@ -422,7 +425,7 @@ if __name__ == '__main__':
             bot_img = show(bi[show_from:], img_dtype)
             top_grs_img = show(tg[show_from:], grs_dtype)
             bot_grs_img = show(bg[show_from:], grs_dtype)
-            #audio_img = show(a[show_from:], aud_dtype)
+            audio_img = show(a[show_from:], aud_dtype)
 
             cv2.imwrite("./images/top_opt" + str(record) + ".jpg", top_opt)
             cv2.imwrite("./images/bot_opt" + str(record) + ".jpg", bot_opt)
@@ -430,5 +433,5 @@ if __name__ == '__main__':
             cv2.imwrite("./images/bot_img" + str(record) + ".jpg", bot_img)
             cv2.imwrite("./images/top_grs_img" + str(record) + ".jpg", top_grs_img)
             cv2.imwrite("./images/bot_grs_img" + str(record) + ".jpg", bot_grs_img)
-            #cv2.imwrite("./images/audio_img" + str(record) + ".jpg", audio_img)
+            cv2.imwrite("./images/audio_img" + str(record) + ".jpg", audio_img)
             record += 1
